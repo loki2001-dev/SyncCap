@@ -1,0 +1,400 @@
+openapi: 3.0.3
+info:
+  title: SyncCap acquisition status and control API
+  version: 1.0.0
+  description: |
+    Collects the status of the multi-channel video/sensor acquisition system (synccap_collector)
+    and forwards start/stop commands to it over MQTT.
+
+    * The collector posts its status to `POST /status` every 20-30 s and publishes the same
+      document on MQTT `video/status` every few seconds. `GET /status` returns whichever arrived last.
+    * `POST /control` publishes on MQTT `video/control`. The collector answers on
+      `video/control/ack`; poll `GET /control/{request_id}` for the result.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: status
+  - name: control
+  - name: meta
+paths:
+  /status:
+    post:
+      tags: [status]
+      summary: Receive a status document from the collector
+      operationId: postStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Status'
+      responses:
+        '204':
+          description: Stored
+        '400':
+          description: Not a valid status document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Body larger than 1 MiB
+        '503':
+          description: Service loop busy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags: [status]
+      summary: Latest collector status
+      description: Queue lengths, fps, recorded files, sync_status and sensor_status of the latest document, plus server_meta.
+      operationId: getStatus
+      responses:
+        '200':
+          description: Latest status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusWithMeta'
+        '404':
+          description: No status received yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service loop busy
+  /status/history:
+    get:
+      tags: [status]
+      summary: Most recent status documents
+      operationId: getStatusHistory
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: History, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, items]
+                properties:
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        received_at:
+                          type: string
+                          format: date-time
+                        received_via:
+                          type: string
+                          enum: [http, mqtt]
+                        status:
+                          $ref: '#/components/schemas/Status'
+        '400':
+          description: limit out of range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /control:
+    post:
+      tags: [control]
+      summary: Start or stop the acquisition
+      description: Publishes the command on MQTT `video/control` (QoS 1). 202 means published, not executed.
+      operationId: postControl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command:
+                  type: string
+                  enum: [start, stop]
+            examples:
+              start:
+                value: {command: start}
+              stop:
+                value: {command: stop}
+      responses:
+        '202':
+          description: Published to the collector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlRecord'
+        '400':
+          description: Unknown command or malformed body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: MQTT broker not connected or service loop busy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /control/{request_id}:
+    get:
+      tags: [control]
+      summary: Result of a control request
+      operationId: getControl
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9._-]{1,64}$'
+      responses:
+        '200':
+          description: Request state (pending until the collector acknowledges)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlRecord'
+        '404':
+          description: Unknown or expired request id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /health:
+    get:
+      tags: [meta]
+      summary: Server health
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  mqtt_connected:
+                    type: boolean
+                  last_status_age_s:
+                    type: number
+                    nullable: true
+  /openapi.yaml:
+    get:
+      tags: [meta]
+      summary: This document
+      responses:
+        '200':
+          description: OpenAPI document
+  /docs:
+    get:
+      tags: [meta]
+      summary: Swagger UI
+      responses:
+        '200':
+          description: HTML page
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    ChannelStatus:
+      type: object
+      required: [id, fps, queue_length]
+      properties:
+        id:
+          type: integer
+        fps:
+          type: number
+          description: frames encoded per second over the last second
+        queue_length:
+          type: integer
+          description: frames waiting in the channel encoder queue
+        source:
+          type: string
+          enum: [file, network, webcam, synthetic]
+        frames_encoded:
+          type: integer
+        dropped:
+          type: integer
+        duplicated:
+          type: integer
+          description: ticks that latched the same picture again (source slower than the tick)
+        missed_ticks:
+          type: integer
+        source_errors:
+          type: integer
+        encode_ms_avg:
+          type: number
+    SyncStatus:
+      type: object
+      required: [max_offset_ms, locked]
+      properties:
+        max_offset_ms:
+          type: number
+          description: largest channel-to-channel timestamp offset over the last 10 s
+        locked:
+          type: boolean
+          description: true when the last 10 s had no offset above tolerance and no incomplete frame set
+        last_offset_ms:
+          type: number
+        max_offset_total_ms:
+          type: number
+        tolerance_ms:
+          type: number
+        sets_checked:
+          type: integer
+        sets_locked:
+          type: integer
+        violations:
+          type: integer
+        incomplete:
+          type: integer
+        backpressure:
+          type: integer
+    SensorStatus:
+      type: object
+      required: [temperature, humidity, acceleration]
+      properties:
+        temperature:
+          type: number
+          description: degrees Celsius
+        humidity:
+          type: number
+          description: relative humidity, percent
+        acceleration:
+          type: number
+          description: dynamic acceleration magnitude in g (|a| - 1 g)
+        valid:
+          type: boolean
+        samples:
+          type: integer
+    Status:
+      type: object
+      required: [schema_version, channel_status, sync_status, sensor_status]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        device_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptime_s:
+          type: number
+        acquisition:
+          type: object
+          properties:
+            state:
+              type: string
+              enum: [idle, running, stopping, error]
+            session_id:
+              type: string
+            reason:
+              type: string
+        channel_status:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/ChannelStatus'
+        sync_status:
+          $ref: '#/components/schemas/SyncStatus'
+        sensor_status:
+          $ref: '#/components/schemas/SensorStatus'
+        storage:
+          type: object
+          properties:
+            segment:
+              type: integer
+            bytes_written:
+              type: integer
+            files:
+              type: array
+              maxItems: 64
+              items:
+                type: string
+            dropped:
+              type: integer
+            write_errors:
+              type: integer
+            queue_length:
+              type: integer
+      example:
+        schema_version: 1
+        device_id: synccap-01
+        timestamp: '2026-10-14T13:00:25.120Z'
+        uptime_s: 25.1
+        acquisition: {state: running, session_id: 20261014_130000_synccap-01, reason: ''}
+        channel_status:
+          - {id: 0, fps: 30.0, queue_length: 0, source: synthetic}
+          - {id: 1, fps: 30.0, queue_length: 1, source: synthetic}
+          - {id: 2, fps: 30.0, queue_length: 0, source: synthetic}
+        sync_status: {max_offset_ms: 0.44, locked: true}
+        sensor_status: {temperature: 24.5, humidity: 60.2, acceleration: 0.03}
+    StatusWithMeta:
+      allOf:
+        - $ref: '#/components/schemas/Status'
+        - type: object
+          properties:
+            server_meta:
+              type: object
+              properties:
+                received_at:
+                  type: string
+                  format: date-time
+                received_via:
+                  type: string
+                  enum: [http, mqtt]
+                age_s:
+                  type: number
+                stale:
+                  type: boolean
+                  description: older than stale_after_s (default 60 s = 2 x the longest report interval)
+                collector_online:
+                  type: boolean
+                  nullable: true
+                  description: from the retained MQTT video/online topic (last will = offline)
+                received_http:
+                  type: integer
+                received_mqtt:
+                  type: integer
+    ControlRecord:
+      type: object
+      required: [request_id, command, result]
+      properties:
+        request_id:
+          type: string
+        command:
+          type: string
+          enum: [start, stop]
+        result:
+          type: string
+          enum: [pending, accepted, rejected]
+        reason:
+          type: string
+          description: rejected_already_running, rejected_not_running, rejected_busy_stopping, rejected_storage, ...
+        created_at:
+          type: string
+          format: date-time
+        answered_at:
+          type: string
