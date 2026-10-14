@@ -1,0 +1,12 @@
+build*/
+recordings/
+logs*/
+samples/video/
+.vscode/
+3rdparty/*
+!3rdparty/spdlog
+!3rdparty/nlohmann
+!3rdparty/cpp_httplib
+!3rdparty/paho_mqtt_c
+!3rdparty/libuv_src
+!3rdparty/Catch2
