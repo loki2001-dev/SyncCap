@@ -1,0 +1,33 @@
+# Acquisition system on Linux (synthetic inputs by default). build context: repository root
+#   docker build -f Dockerfile.collector -t synccap-collector .
+FROM ubuntu:24.04 AS build
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config ca-certificates \
+      libavcodec-dev libavformat-dev libswscale-dev libavutil-dev \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY CMakeLists.txt ./
+COPY src ./src
+COPY server ./server
+COPY tests ./tests
+COPY 3rdparty/spdlog ./3rdparty/spdlog
+COPY 3rdparty/nlohmann/include ./3rdparty/nlohmann/include
+COPY 3rdparty/cpp_httplib ./3rdparty/cpp_httplib
+COPY 3rdparty/paho_mqtt_c/paho.mqtt.c-1.3.16 ./3rdparty/paho_mqtt_c/paho.mqtt.c-1.3.16
+COPY 3rdparty/libuv_src/libuv-1.51.0 ./3rdparty/libuv_src/libuv-1.51.0
+COPY 3rdparty/Catch2/amalgamated ./3rdparty/Catch2/amalgamated
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSYNCCAP_WITH_OPENCV=OFF -DSYNCCAP_BUILD_DASHBOARD=OFF \
+ && cmake --build build \
+ && cd build && ctest --output-on-failure --timeout 300
+
+FROM ubuntu:24.04
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libavcodec60 libavformat60 libswscale7 libavutil58 \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --create-home --home-dir /app synccap
+WORKDIR /app
+COPY --from=build /src/build/synccap_collector /app/synccap_collector
+COPY config/collector.docker.json /app/config/collector.json
+RUN mkdir -p /app/recordings /app/logs && chown -R synccap /app
+USER synccap
+ENTRYPOINT ["/app/synccap_collector", "--config", "/app/config/collector.json"]
