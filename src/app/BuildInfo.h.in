@@ -1,0 +1,5 @@
+#pragma once
+
+constexpr const char* BUILD_VERSION = "@PROJECT_VERSION@";
+constexpr const char* BUILD_COMMIT = "@PROJECT_COMMIT@";
+constexpr const char* BUILD_TYPE = "@CMAKE_BUILD_TYPE@";
