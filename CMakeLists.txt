@@ -285,6 +285,10 @@ if(SYNCCAP_BUILD_DASHBOARD)
 
   add_executable(synccap_dashboard dashboard/src/ui/main.cpp dashboard/src/ui/DashboardApp.cpp)
   target_link_libraries(synccap_dashboard PRIVATE synccap_dashboard_lib)
+  if(WIN32)
+    # timeBeginPeriod for a steady 30 fps preview
+    target_link_libraries(synccap_dashboard PRIVATE winmm)
+  endif()
   target_compile_options(synccap_dashboard PRIVATE ${PROJECT_WARNINGS})
   list(APPEND SYNCCAP_TARGETS synccap_dashboard_lib synccap_dashboard)
 endif()

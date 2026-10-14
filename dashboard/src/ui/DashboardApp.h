@@ -20,7 +20,7 @@ struct dashboard_options {
     std::chrono::milliseconds timeout{1500};
     bool previewEnabled = true;
     std::string previewUrl = "http://127.0.0.1:8090";
-    std::chrono::milliseconds previewPeriod{100};
+    std::chrono::milliseconds previewPeriod{33};  // 30 fps; a tick already shown is never fetched twice
     int width = 1440;
     int height = 900;
 };
@@ -57,7 +57,7 @@ private:
     DashboardModel _model;
     DashboardView _view;
     HttpLibClient _http;
-    HttpLibClient _previewHttp;
+    HttpLibClient _previewHttp{true};  // five requests per frame at 30 fps: keep the connection
     BlockingQueue<model_update_t> _inbox;
     PreviewTextures _textures;
     // last members: joined first on destruction
