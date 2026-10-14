@@ -190,6 +190,7 @@ void PreviewClient::fetchRound() {
     _lastTick = tick;
     _hasTick = true;
     _setsShown += 1;
+    update.receivedAt = std::chrono::steady_clock::now();
     publish([update = std::move(update)](DashboardModel& model) mutable {
         model.applyPreview(std::move(update));
     });

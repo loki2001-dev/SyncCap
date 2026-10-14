@@ -68,6 +68,9 @@ struct preview_update {
     int64_t offsetUs = 0;
     std::string verdict;
     std::vector<preview_frame> frames;
+    // when the network thread finished the set. the UI may drain several sets in one frame, so the rate is
+    // measured here, not at apply time. default: apply time
+    std::chrono::steady_clock::time_point receivedAt{};
 };
 
 struct preview_state {
@@ -143,7 +146,7 @@ private:
     bool _mqttConnected;
     status_snapshot _status;
     preview_state _preview;
-    std::chrono::steady_clock::time_point _lastPreviewAt;
+    std::deque<std::chrono::steady_clock::time_point> _previewArrivals;  // last second; cleared by an outage
     std::deque<control_entry> _controls;
     std::deque<event_entry> _events;
     MetricSeries _offsetHistory;
