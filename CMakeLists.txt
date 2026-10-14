@@ -309,6 +309,7 @@ if(SYNCCAP_BUILD_TESTS)
     tests/BlockingQueueTest.cpp
     tests/StatusJsonCodecTest.cpp
     tests/ControlCommandCodecTest.cpp
+    tests/HttpLibClientTest.cpp
   )
   set(TEST_LIBS synccap_common)
   if(SYNCCAP_BUILD_COLLECTOR)
