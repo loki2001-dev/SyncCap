@@ -1,0 +1,38 @@
+# docker compose up --build                     broker + OpenAPI server
+# docker compose --profile full up --build      + the acquisition system (synthetic inputs, Linux build)
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "127.0.0.1:1883:1883"
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: synccap-server:1.0.0
+    environment:
+      SYNCCAP_MQTT_HOST: mosquitto
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - mosquitto
+    init: true
+    restart: unless-stopped
+
+  collector:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    image: synccap-collector:1.0.0
+    volumes:
+      - ./recordings:/app/recordings
+    depends_on:
+      - mosquitto
+      - server
+    init: true
+    stop_grace_period: 20s
