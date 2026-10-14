@@ -1,5 +1,9 @@
 #include "catch_amalgamated.hpp"
 
+#include <cstdint>
+
+#include <algorithm>
+#include <chrono>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -55,6 +59,13 @@ std::string statusBody(acquisition_phase phase, bool locked, double offsetMs, bo
 
 http_result health(bool mqtt) {
     return response(200, nlohmann::json{{"status", "ok"}, {"mqtt_connected", mqtt}}.dump());
+}
+
+preview_update previewAt(uint64_t tick, std::chrono::steady_clock::time_point receivedAt) {
+    preview_update update;
+    update.tick = tick;
+    update.receivedAt = receivedAt;
+    return update;
 }
 
 bool hasEvent(const DashboardModel& model, const std::string& text) {
@@ -196,4 +207,53 @@ TEST_CASE("DashboardModel extends the plots only for a new status document") {
     model.applyStatus(response(200, statusBody(acquisition_phase::running, true, 0.7)));
     REQUIRE(model.get_offset_history().get_size() == 2);
     REQUIRE(model.get_polls() == 4);
+}
+
+TEST_CASE("DashboardModel reports the preview rate of evenly spaced sets") {
+    DashboardModel model(8);
+    const auto start = std::chrono::steady_clock::now();
+    const std::chrono::microseconds period(33333);
+    for (uint64_t tick = 0; tick < 30; ++tick) {
+        model.applyPreview(previewAt(tick, start + period * static_cast<int64_t>(tick)));
+    }
+    REQUIRE(model.get_preview().setsPerSecond == Catch::Approx(30.0).margin(0.1));
+}
+
+TEST_CASE("DashboardModel keeps the preview rate bounded when sets are applied back to back") {
+    // the UI drains the inbox once per frame: two sets 66 ms apart can arrive with a few microseconds between
+    DashboardModel model(8);
+    const auto start = std::chrono::steady_clock::now();
+    const std::chrono::microseconds pair(66667);
+    const std::chrono::microseconds backToBack(5);
+    double highest = 0.0;
+    for (uint64_t pairIndex = 0; pairIndex < 30; ++pairIndex) {
+        const auto first = start + pair * static_cast<int64_t>(pairIndex);
+        model.applyPreview(previewAt(pairIndex * 2, first));
+        highest = std::max(highest, model.get_preview().setsPerSecond);
+        model.applyPreview(previewAt(pairIndex * 2 + 1, first + backToBack));
+        highest = std::max(highest, model.get_preview().setsPerSecond);
+    }
+    REQUIRE(highest < 45.0);
+    REQUIRE(model.get_preview().setsPerSecond == Catch::Approx(30.0).margin(8.0));
+}
+
+TEST_CASE("DashboardModel restarts the preview rate after the preview was unavailable") {
+    DashboardModel model(8);
+    const auto start = std::chrono::steady_clock::now();
+    const std::chrono::microseconds period(33333);
+    for (uint64_t tick = 0; tick < 10; ++tick) {
+        model.applyPreview(previewAt(tick, start + period * static_cast<int64_t>(tick)));
+    }
+    model.applyPreviewUnavailable(true, "no preview yet (not recording?)");
+    REQUIRE(model.get_preview().setsPerSecond == 0.0);
+
+    // recording resumes 10 s later: the pause must not count as one long interval
+    const auto resumed = start + std::chrono::seconds(10);
+    model.applyPreview(previewAt(100, resumed));
+    model.applyPreview(previewAt(101, resumed + period));
+    REQUIRE(model.get_preview().setsPerSecond == 0.0);  // too little history yet, never a burst value
+    for (uint64_t tick = 2; tick < 10; ++tick) {
+        model.applyPreview(previewAt(100 + tick, resumed + period * static_cast<int64_t>(tick)));
+    }
+    REQUIRE(model.get_preview().setsPerSecond == Catch::Approx(30.0).margin(0.1));
 }

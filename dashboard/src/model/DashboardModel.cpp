@@ -14,7 +14,10 @@ namespace {
 constexpr int HTTP_OK = 200;
 constexpr int HTTP_ACCEPTED = 202;
 constexpr int HTTP_NOT_FOUND = 404;
-constexpr double PREVIEW_RATE_SMOOTHING = 0.8;
+constexpr std::chrono::seconds PREVIEW_RATE_WINDOW{1};
+// below this span a burst of sets would read as a huge rate; show 0 until there is enough history
+constexpr double PREVIEW_RATE_MIN_SPAN_S = 0.25;
+constexpr size_t PREVIEW_RATE_MAX_SETS = 256;
 
 std::string now() {
     return TimeUtil::formatClockLocal(std::chrono::system_clock::now());
@@ -139,16 +142,19 @@ void DashboardModel::applyHealth(const http_result& result) {
 }
 
 void DashboardModel::applyPreview(preview_update update) {
-    const auto now = std::chrono::steady_clock::now();
-    if (_preview.version > 0) {
-        const double seconds = std::chrono::duration<double>(now - _lastPreviewAt).count();
-        if (seconds > 0.0) {
-            // smoothed rate of new sets
-            _preview.setsPerSecond =
-                _preview.setsPerSecond * PREVIEW_RATE_SMOOTHING + (1.0 - PREVIEW_RATE_SMOOTHING) / seconds;
-        }
+    const auto at = update.receivedAt != std::chrono::steady_clock::time_point{} ? update.receivedAt
+                                                                                 : std::chrono::steady_clock::now();
+    // sets counted over a window, never 1/interval: two sets applied back to back would make that unbounded
+    if (!_previewArrivals.empty() && at < _previewArrivals.back()) {
+        _previewArrivals.clear();
     }
-    _lastPreviewAt = now;
+    _previewArrivals.push_back(at);
+    while (at - _previewArrivals.front() > PREVIEW_RATE_WINDOW || _previewArrivals.size() > PREVIEW_RATE_MAX_SETS) {
+        _previewArrivals.pop_front();
+    }
+    const double spanS = std::chrono::duration<double>(at - _previewArrivals.front()).count();
+    _preview.setsPerSecond =
+        spanS >= PREVIEW_RATE_MIN_SPAN_S ? static_cast<double>(_previewArrivals.size() - 1) / spanS : 0.0;
     if (_preview.link != link_state::connected) {
         noteEvent(event_level::info, "video preview connected");
     }
@@ -169,6 +175,8 @@ void DashboardModel::applyPreviewUnavailable(bool reachable, const std::string& 
     _preview.link = link;
     _preview.error = reason;
     _preview.setsPerSecond = 0.0;
+    // the gap of the outage is not an interval between live sets
+    _previewArrivals.clear();
     // never leave the last pictures on screen as if they were live
     if (!_preview.frames.empty()) {
         _preview.frames.clear();
