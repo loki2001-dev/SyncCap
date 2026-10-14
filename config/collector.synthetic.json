@@ -1,0 +1,62 @@
+{
+  "device_id": "synccap-01",
+  "autostart": true,
+  "video": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "sync_tolerance_ms": 2.0,
+    "spin_margin_us": 1500,
+    "drop_unsynced": true,
+    "pool_frames": 12,
+    "encoder_queue": 4,
+    "channels": [
+      {
+        "id": 0,
+        "type": "synthetic"
+      },
+      {
+        "id": 1,
+        "type": "synthetic"
+      },
+      {
+        "id": 2,
+        "type": "synthetic"
+      },
+      {
+        "id": 3,
+        "type": "synthetic"
+      }
+    ]
+  },
+  "encoder": {
+    "preset": "ultrafast",
+    "tune": "zerolatency",
+    "bitrate_kbps": 4000,
+    "threads": 2
+  },
+  "storage": {
+    "root": "recordings",
+    "segment_seconds": 10
+  },
+  "sensor": {
+    "type": "simulated",
+    "period_ms": 100,
+    "seed": 42
+  },
+  "report": {
+    "url": "http://127.0.0.1:8080/status",
+    "interval_s": 20,
+    "timeout_ms": 3000
+  },
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "client_id": "synccap-collector",
+    "status_interval_ms": 1000
+  },
+  "log": {
+    "dir": "logs",
+    "level": "info"
+  }
+}

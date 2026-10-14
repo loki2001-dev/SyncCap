@@ -1,0 +1,75 @@
+{
+  "device_id": "synccap-01",
+  "autostart": true,
+  "video": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "sync_tolerance_ms": 2.0,
+    "spin_margin_us": 1500,
+    "drop_unsynced": true,
+    "pool_frames": 12,
+    "encoder_queue": 4,
+    "max_pending_ticks": 3,
+    "channels": [
+      {
+        "id": 0,
+        "type": "file",
+        "uri": "samples/video/ch0.mp4",
+        "loop": true
+      },
+      {
+        "id": 1,
+        "type": "file",
+        "uri": "samples/video/ch1.mp4",
+        "loop": true
+      },
+      {
+        "id": 2,
+        "type": "file",
+        "uri": "samples/video/ch2.avi",
+        "loop": true
+      },
+      {
+        "id": 3,
+        "type": "synthetic"
+      }
+    ]
+  },
+  "encoder": {
+    "preset": "ultrafast",
+    "tune": "zerolatency",
+    "bitrate_kbps": 4000,
+    "threads": 2,
+    "gop": 30
+  },
+  "storage": {
+    "root": "recordings",
+    "segment_seconds": 180
+  },
+  "sensor": {
+    "type": "csv",
+    "period_ms": 100,
+    "csv_path": "samples/sensor/sensor.csv",
+    "loop": true
+  },
+  "report": {
+    "url": "http://127.0.0.1:8080/status",
+    "interval_s": 25,
+    "timeout_ms": 5000
+  },
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "client_id": "synccap-collector",
+    "status_topic": "video/status",
+    "control_topic": "video/control",
+    "ack_topic": "video/control/ack",
+    "online_topic": "video/online",
+    "status_interval_ms": 1000
+  },
+  "log": {
+    "dir": "logs",
+    "level": "info"
+  }
+}
