@@ -115,7 +115,7 @@ flowchart LR
     U -- "GET /status, POST /control" --> API
     U --> D
     D -- "GET /status, /health, /control/id (1 s), POST /control" --> API
-    D -- "GET /preview, /preview/N.jpg?tick=T (10/s)" --> P
+    D -- "GET /preview, /preview/N.jpg?tick=T (30/s)" --> P
 ```
 
 ### 외부 인터페이스
@@ -128,7 +128,7 @@ flowchart LR
 | RTSP/HLS | we connect | `rtsp://...`, `http(s)://.../*.m3u8` | FFmpeg | 소스 고유 fps |
 | 웹캠 | we read | 장치 번호 | OpenCV `VideoCapture` | 장치 fps |
 | 센서 CSV | we read | `sensor.csv_path` | CSV | `sensor.period_ms` |
-| 영상 미리보기 | we listen (수집 시스템) | `preview.bind:preview.port` (기본 `127.0.0.1:8090`) | HTTP/1.1, JSON + JPEG | 대시보드가 약 10/s |
+| 영상 미리보기 | we listen (수집 시스템) | `preview.bind:preview.port` (기본 `127.0.0.1:8090`) | HTTP/1.1 keep-alive, JSON + JPEG | 대시보드가 약 30/s |
 | 서버 REST | we listen (서버) | `server.bind:server.port` (기본 `0.0.0.0:8080`, 컨테이너 안) | HTTP/1.1, JSON | 사용자 요청 |
 
 ---
@@ -716,7 +716,8 @@ sequenceDiagram
 - 제공: `PreviewComponent`(루프 컴포넌트)가 `HttpServerHost`(전송 계층, 리스너 스레드)로 `GET /preview`, `GET /preview/{index}.jpg?tick=T`를 받는다. 핸들러는 파싱만 하고 읽기는 `callOnLoop`(core/LoopCall.h)로 루프에서 한다(서버의 `ApiServer`와 같은 방식, 공용 함수로 뽑음).
 - **같은 순간 보장**: 대시보드는 메타데이터에서 tick을 받은 뒤 모든 채널을 `?tick=T`로 요청한다. 받는 도중 그 tick이 교체되면 409를 받고 세트 전체를 버린다. 화면에는 항상 한 tick의 4채널만 나온다. 화면마다 세트 안 래치 시각 차이를 겹쳐 표시해 동기화를 눈으로 확인할 수 있다.
 - 대시보드: `PreviewClient`(전송 스레드)가 받고 stb_image로 RGBA 디코드, inbox로 UI에 넘김. UI 스레드가 `PreviewTextures`로 OpenGL 텍스처를 갱신(세트 version이 바뀔 때만, 크기가 같으면 `glTexSubImage2D`).
-- 비용(4채널, 4.4절과 같은 조건, 40 s): CPU 136 % → 157 %(코어 1개 기준), RSS 253 → 261 MB, fps 29.97 → 29.99, 오프셋 p99 317 → 192 µs(측정 잡음 범위).
+- 비용(4채널, 4.4절과 같은 조건, 40 s, `preview.fps` 10): CPU 136 % → 157 %(코어 1개 기준), RSS 253 → 261 MB, fps 29.97 → 29.99, 오프셋 p99 317 → 192 µs(측정 잡음 범위).
+- 30 fps 표시(`config/collector*.json`의 `preview.fps` 30, 대시보드 기본 33 ms 주기): 수집 시스템 CPU는 10 fps 대비 +0.3~0.4코어, 녹화 fps와 동기화 판정은 그대로(40 s, 2회). 대시보드에는 세 가지가 필요했다(A.17): 미리보기 HTTP 연결 재사용(`HttpLibClient(keepAlive)`), 새 세트가 오면 `glfwPostEmptyEvent`로 UI 대기를 바로 깨움, 창이 있는 동안 `timeBeginPeriod(1)`. 결과: 표시율 29.4~29.6 세트/s, 건너뜀 0(대시보드 로그 `[http][STAT] preview sets_per_s`).
 
 ### 4.7 MQTT는 Paho MQTT C 비동기 API
 
@@ -1001,6 +1002,7 @@ C++17 활용 위치: `std::filesystem`(세션·세그먼트 디렉터리), `std:
 | A.13 | MQTT 상태를 1 s로 줄이자 시작 직후 fps가 20으로 보고됨 | 첫 1 s 구간에 소스 열기와 시작 대기 300 ms가 섞임 | 시작 후 첫 통계 구간은 기준값으로만 쓰고 fps는 다음 구간부터 | 종단 간 시험 출력 `fps=[20.04, ...]` |
 | A.14 | 상태와 영상이 탭(나중에 페이지 버튼) 둘로 나뉘어 있었음. 탭 선택도 실행마다 달라 보임 | 영상을 보면서 동기화·fps를 함께 볼 수 없음 | 한 화면으로 합침: 왼쪽 영상(16:9 유지)과 채널 표, 오른쪽 동기화·센서·저장·이벤트. 명령 표는 상단의 마지막 명령 표시와 이벤트 로그로 대체 | 사용자 피드백 |
 | A.16 | 녹화를 멈춘 뒤에도 마지막 미리보기가 남아 "실시간"처럼 보였음 | 정지 상태를 오해 | 파이프라인 정지 시 미리보기 보관분을 비우고(`GET /preview` 404), 대시보드는 미리보기를 잃으면 화면을 비움 | 화면 캡처 |
+| A.17 | `preview.fps`를 30으로 올려도 대시보드는 초당 약 17세트만 표시 | 영상이 끊겨 보임 | ① 요청마다 새 TCP 연결: Windows에서 연결 수립이 간헐적으로 15~25 ms(요청 p90 17.5 ms, 연결 재사용 시 2.7 ms) → 미리보기 클라이언트만 keep-alive ② UI가 이벤트를 최대 50 ms 기다려 화면 갱신이 약 20/s → 새 세트 도착 시 `glfwPostEmptyEvent` ③ 기본 타이머 15.6 ms라 33 ms 주기가 31/47 ms로 흔들림 → 대시보드도 `timeBeginPeriod(1)` | 사용자 체감, 요청 단계별 시간 측정 |
 | A.15 | 미리보기 HTTP 리스너 스레드와 대시보드 네트워크 스레드가 루프 계층 디렉터리에 있었음 | 규약 검사 P1-THREAD/P1-LOCK 위반 | `src/network/HttpServerHost`로 옮기고, 대시보드를 `model/ net/ ui/`로 나눔 | `verify.sh` |
 
 교훈: 합성 소스가 실제보다 관대하면 결함이 숨는다. A.4는 합성 소스에서도 실제 파일 디코드와 같은 리더 경로를 거치게 해서 드러났다.

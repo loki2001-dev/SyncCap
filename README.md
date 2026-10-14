@@ -34,7 +34,7 @@
 - MQTT Control: Eclipse Paho MQTT C (async) on `video/status`, `video/control`, `video/control/ack` and `video/online` <span style="color:deepskyblue; font-weight:bold">(LWT)</span>
 - OpenAPI Server: C++ REST server with <span style="color:deepskyblue; font-weight:bold">Swagger UI</span>, status history and control relay to MQTT, shipped as a Docker image
 - Monitoring Dashboard: Dear ImGui + GLFW + OpenGL 3; network calls run on <span style="color:deepskyblue; font-weight:bold">dedicated threads</span> so the UI never blocks
-- Live Preview: locked sets downscaled to 640x360 JPEG at 10 fps on a separate thread, served at `GET /preview` (about +0.2 core, +8 MB for 4 channels)
+- Live Preview: locked sets downscaled to 640x360 JPEG at <span style="color:deepskyblue; font-weight:bold">30 fps</span> on a separate thread, served at `GET /preview` over a kept-alive connection; the dashboard wakes on each new set (about +0.3–0.4 core over a 10 fps preview, recording unaffected)
 - Event-Loop Control Plane: components run on a single <span style="color:deepskyblue; font-weight:bold">libuv loop</span> with a message bus and immutable state snapshots
 - Graceful Shutdown & Reconnect: the collector keeps recording without broker or server, reconnects with backoff, and finalizes files on Ctrl+C
 - Testing: <span style="color:deepskyblue; font-weight:bold">Catch2 (109 test cases)</span>, 4-channel pipeline integration, server API integration, end-to-end and benchmark scripts
@@ -130,7 +130,7 @@ build/synccap_collector --config config/collector.synthetic.json --duration 60  
 
 # Dashboard (server http://127.0.0.1:8080, preview http://127.0.0.1:8090)
 build/synccap_dashboard
-build/synccap_dashboard --server http://192.168.0.10:8080 --preview http://192.168.0.20:8090 --preview-fps 10
+build/synccap_dashboard --server http://192.168.0.10:8080 --preview http://192.168.0.20:8090 --preview-fps 30
 
 # Verify synchronization of a recorded session
 python scripts/verify_sync.py recordings/<session>
