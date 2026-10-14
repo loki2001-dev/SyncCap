@@ -397,12 +397,12 @@ SyncCap/
 │                          Video Data Plane (dedicated threads)                            │
 │                                                                                          │
 │   ┌────────────┐   ┌────────────────┐   ┌────────────┐                                   │
-│   │ reader ch0 │──▶│ LatestFrameSlot│──▶│ capture ch0│──┐                                │
+│   │ reader ch0 │──>│ LatestFrameSlot│──>│ capture ch0│──┐                                │
 │   │ (decode)   │   │ (1, overwrite) │   │ (latch @T) │  │                                │
 │   └────────────┘   └────────────────┘   └────────────┘  │                                │
 │        ...                ...                 ...       │   ┌─────────────┐              │
-│   ┌────────────┐   ┌────────────────┐   ┌────────────┐  ├──▶│ capture     │              │
-│   │ reader chN │──▶│ LatestFrameSlot│──▶│ capture chN│──┘   │ queue       │              │
+│   ┌────────────┐   ┌────────────────┐   ┌────────────┐  ├──>│ capture     │              │
+│   │ reader chN │──>│ LatestFrameSlot│──>│ capture chN│──┘   │ queue       │              │
 │   └────────────┘   └────────────────┘   └────────────┘      └──────┬──────┘              │
 │                                                                    ▼                     │
 │                                                          ┌───────────────────┐           │
