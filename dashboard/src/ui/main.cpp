@@ -19,7 +19,7 @@ constexpr long long MILLIS_PER_SECOND = 1000;
 
 void printUsage() {
     std::printf("usage: synccap_dashboard [--server http://127.0.0.1:8080] [--poll-ms 1000]\n"
-                "                       [--preview http://127.0.0.1:8090] [--preview-fps 10] [--no-preview]\n");
+                "                       [--preview http://127.0.0.1:8090] [--preview-fps 30] [--no-preview]\n");
 }
 
 }  // namespace

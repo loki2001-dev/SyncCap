@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -24,8 +25,10 @@
  */
 class PreviewClient {
 public:
+    // onPublished: worker thread, after each set reached the inbox. the UI uses it to wake its event wait
     PreviewClient(std::string baseUrl, IHttpClient& http, std::chrono::milliseconds period,
-                  std::chrono::milliseconds timeout, BlockingQueue<model_update_t>& inbox);
+                  std::chrono::milliseconds timeout, BlockingQueue<model_update_t>& inbox,
+                  std::function<void()> onPublished = {});
     ~PreviewClient();
 
     PreviewClient(const PreviewClient&) = delete;
@@ -43,6 +46,7 @@ public:
 private:
     void run();
     void fetchRound();
+    void logStatsWhenDue(std::chrono::steady_clock::time_point now);
     bool isRunning();
     void publish(model_update_t update);
 
@@ -51,6 +55,7 @@ private:
     std::chrono::milliseconds _period;
     std::chrono::milliseconds _timeout;
     BlockingQueue<model_update_t>& _inbox;
+    std::function<void()> _onPublished;
     std::mutex _stopMutex;
     std::condition_variable _stopSignal;
     bool _running;
@@ -59,4 +64,7 @@ private:
     // worker thread only
     uint64_t _lastTick;
     bool _hasTick;
+    uint64_t _setsShown = 0;
+    uint64_t _setsSkipped = 0;  // a channel answered 409 or failed mid-set
+    std::chrono::steady_clock::time_point _statsSince{};
 };

@@ -3,6 +3,11 @@
 #include <filesystem>
 #include <utility>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <timeapi.h>
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include "imgui.h"
@@ -39,6 +44,34 @@ const char* findSystemFont() {
 void onGlfwError(int code, const char* description) {
     LOG_ERROR(app, sys, "glfw error code={} message={}", code, description != nullptr ? description : "");
 }
+
+// the default Windows timer granularity is 15.6 ms: a 33 ms preview period would wake at 31 or 47 ms and the
+// 30 fps preview would judder. raised for the lifetime of the window (Windows 11 honors it for a visible window)
+class TimerResolution {
+public:
+    TimerResolution() {
+#ifdef _WIN32
+        _raised = timeBeginPeriod(TIMER_RESOLUTION_MS) == TIMERR_NOERROR;
+#endif
+    }
+
+    ~TimerResolution() {
+#ifdef _WIN32
+        if (_raised) {
+            timeEndPeriod(TIMER_RESOLUTION_MS);
+        }
+#endif
+    }
+
+    TimerResolution(const TimerResolution&) = delete;
+    TimerResolution& operator=(const TimerResolution&) = delete;
+
+private:
+#ifdef _WIN32
+    static constexpr UINT TIMER_RESOLUTION_MS = 1;
+    bool _raised = false;
+#endif
+};
 
 }  // namespace
 
@@ -140,11 +173,16 @@ int DashboardApp::run() {
         return 1;
     }
     setupImGui();
+    const TimerResolution timerResolution;
     _client = std::make_unique<ServerClient>(_options.serverUrl, _http, _options.pollPeriod, _options.timeout, _inbox);
     _client->start();
     if (_options.previewEnabled) {
+        // a new set wakes the event wait at once; otherwise it would show at the next 50 ms timeout (~20 fps).
+        // glfwPostEmptyEvent is thread-safe and the client stops before glfwTerminate
         _previewClient = std::make_unique<PreviewClient>(_options.previewUrl, _previewHttp, _options.previewPeriod,
-                                                         _options.timeout, _inbox);
+                                                         _options.timeout, _inbox, []() {
+                                                             glfwPostEmptyEvent();
+                                                         });
         _previewClient->start();
     }
     LOG_INFO(app, life, "dashboard started server={} poll_ms={} preview={} preview_period_ms={}", _options.serverUrl,
