@@ -55,6 +55,10 @@
     "client_id": "synccap-collector",
     "status_interval_ms": 1000
   },
+  "preview": {
+    "enabled": true,
+    "fps": 30
+  },
   "log": {
     "dir": "logs",
     "level": "info"
