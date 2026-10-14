@@ -1,68 +1,33 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
-build/
-Build/
-build-*/
-
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
+# build output
+/build*/
+/out/
 compile_commands.json
 
-# Temporary files
-*.tmp
+# runtime output
+/recordings/
+/logs/
+/logs-server/
+/e2e_output/
 *.log
-*.bak
-*.swp
 
-# vcpkg
-vcpkg_installed/
+# generated simulation inputs (scripts/make_samples.py); the sensor CSV is committed
+/samples/video/
+*.mp4
+*.avi
+*.h264
 
-# debug information files
-*.dwo
+# FFmpeg + libx264 binaries are downloaded by scripts/fetch_ffmpeg.ps1, never committed
+/3rdparty/ffmpeg_x264/
+# third-party archives: only extracted source trees are committed
+/3rdparty/**/*.zip
+/3rdparty/**/*.tar.gz
 
-# test output & cache
-Testing/
-.cache/
+# python
+__pycache__/
+*.py[cod]
+
+# editors and OS
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
