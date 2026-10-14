@@ -43,11 +43,14 @@ TEST_CASE("ControlCommandCodec rejects bad payloads with the ack reason") {
 TEST_CASE("ControlCommandCodec accepts a request id at the length limit and rejects one past it") {
     control_request request;
     std::string reason;
-    const std::string atLimit(ControlCommandCodec::MAX_REQUEST_ID, 'a');
-    REQUIRE(ControlCommandCodec::decode(R"({"command":"start","request_id":")" + atLimit + "\"}", request, reason));
-    const std::string pastLimit(ControlCommandCodec::MAX_REQUEST_ID + 1, 'a');
-    REQUIRE_FALSE(
-        ControlCommandCodec::decode(R"({"command":"start","request_id":")" + pastLimit + "\"}", request, reason));
+    // built outside the macros: MSVC's traditional preprocessor misreads a raw string ending in ")" inside a macro
+    const auto withRequestId = [](const std::string& requestId) {
+        return std::string(R"({"command":"start","request_id":")") + requestId + R"("})";
+    };
+    const std::string atLimit = withRequestId(std::string(ControlCommandCodec::MAX_REQUEST_ID, 'a'));
+    REQUIRE(ControlCommandCodec::decode(atLimit, request, reason));
+    const std::string pastLimit = withRequestId(std::string(ControlCommandCodec::MAX_REQUEST_ID + 1, 'a'));
+    REQUIRE_FALSE(ControlCommandCodec::decode(pastLimit, request, reason));
 }
 
 TEST_CASE("ControlCommandCodec round-trips commands and acks") {
