@@ -26,5 +26,8 @@ if not exist "%VSCTEST%" set VSCTEST=ctest
 "%VSCMAKE%" -S "%REPO_ROOT%" -B "%BUILD_DIR%" -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% %SYNCCAP_CMAKE_ARGS% || exit /b 1
 "%VSCMAKE%" --build "%BUILD_DIR%" || exit /b 1
 if "%SYNCCAP_SKIP_TESTS%"=="1" exit /b 0
-"%VSCTEST%" --test-dir "%BUILD_DIR%" --output-on-failure --timeout 300 || exit /b 1
+rem ctest runs inside the build directory: --test-dir needs CMake 3.20, the minimum here is 3.16.
+rem setlocal restores the caller's directory when the script ends
+cd /d "%BUILD_DIR%" || exit /b 1
+"%VSCTEST%" --output-on-failure --timeout 300 || exit /b 1
 endlocal
