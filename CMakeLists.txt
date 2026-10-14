@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.16)
+
+# MSVC prints its /showIncludes lines in the console language, and Ninja recognizes only the prefix detected at
+# configure time. a compile from a console in another language records no header dependencies, so a changed
+# header leaves stale objects behind (LNK2019). English is forced for the detection and for every compile
+if(CMAKE_HOST_WIN32)
+  set(ENV{VSLANG} 1033)
+endif()
 project(synccap VERSION 1.0.0 LANGUAGES C CXX)
+if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+  foreach(lang C CXX)
+    if(NOT CMAKE_${lang}_COMPILER_LAUNCHER)
+      set(CMAKE_${lang}_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env VSLANG=1033)
+    endif()
+  endforeach()
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
